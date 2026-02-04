@@ -18,12 +18,11 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     private NetworkRunner runner;
 
-    private async void Start()
+    public async void StartGameAfterLogin()
     {
-        // Auto-start game session
         await StartGame();
     }
-
+    
     /// <summary>
     /// Start Fusion game session
     /// </summary>

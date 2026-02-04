@@ -7,8 +7,9 @@ using TMPro;
 /// </summary>
 public class LoginUI : MonoBehaviour
 {
-    [Header("UI References")]
-    [SerializeField] private GameObject loginPanel;
+    [Header("UI References")] [SerializeField]
+    private GameObject loginPanel;
+
     [SerializeField] private TMP_InputField usernameInput;
     [SerializeField] private TMP_InputField passwordInput;
     [SerializeField] private Button loginButton;
@@ -20,7 +21,7 @@ public class LoginUI : MonoBehaviour
     {
         loginButton.onClick.AddListener(OnLoginClicked);
         registerButton.onClick.AddListener(OnRegisterClicked);
-        
+
         // Show login panel, hide game UI
         loginPanel.SetActive(true);
         if (gameUI != null) gameUI.SetActive(false);
@@ -47,14 +48,21 @@ public class LoginUI : MonoBehaviour
             {
                 statusText.text = message;
                 statusText.color = Color.green;
-                
+
                 // Update GameManager with player ID
                 var gameManager = FindObjectOfType<GameManager>();
                 if (gameManager != null)
                 {
                     gameManager.SetLocalPlayerId(APIManager.Instance.CurrentPlayerId);
                 }
-                
+
+                // Start Photon connection AFTER login
+                var networkManager = FindObjectOfType<NetworkManager>();
+                if (networkManager != null)
+                {
+                    networkManager.StartGameAfterLogin();
+                }
+
                 // Hide login, show game
                 Invoke(nameof(ShowGame), 1f);
             }
@@ -94,14 +102,21 @@ public class LoginUI : MonoBehaviour
             {
                 statusText.text = message;
                 statusText.color = Color.green;
-                
+
                 // Update GameManager with player ID
                 var gameManager = FindObjectOfType<GameManager>();
                 if (gameManager != null)
                 {
                     gameManager.SetLocalPlayerId(APIManager.Instance.CurrentPlayerId);
                 }
-                
+
+                // Start Photon connection AFTER login
+                var networkManager = FindObjectOfType<NetworkManager>();
+                if (networkManager != null)
+                {
+                    networkManager.StartGameAfterLogin();
+                }
+
                 // Hide login, show game
                 Invoke(nameof(ShowGame), 1f);
             }
