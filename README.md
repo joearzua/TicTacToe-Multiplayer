@@ -70,7 +70,7 @@ TicTacToe-Multiplayer/
     │   ├── Player.cs                # Player entity
     │   └── Match.cs                 # Match entity
     ├── Data/
-    │   └── TicTacToeDbContext.cs   # EF Core DbContext
+    │   └── TicTacToeDbContext.cs    # EF Core DbContext
     └── Program.cs                   # API configuration
 ```
 
@@ -206,3 +206,4 @@ Architectural patterns (server authority, RPC validation, client/server separati
 ## 📄 License
 
 This project is for portfolio and educational purposes.
+
