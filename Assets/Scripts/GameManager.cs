@@ -7,6 +7,9 @@ using UnityEngine;
 /// </summary>
 public class GameManager : NetworkBehaviour
 {
+    [Header("Backend Integration")]
+    private int localPlayerId = -1;
+    
     [Networked, Capacity(9)] 
     public NetworkArray<int> Board => default; // 0=empty, 1=player1, 2=player2
     
@@ -244,5 +247,74 @@ public class GameManager : NetworkBehaviour
     {
         string message = winner == 0 ? "DRAW!" : $"PLAYER {winner} WINS!";
         Debug.Log($"🎮 Game Over: {message}");
+    
+        // Save match to backend (if logged in)
+        if (APIManager.Instance != null && APIManager.Instance.IsLoggedIn && Object.HasStateAuthority)
+        {
+            SaveMatchToBackend(winner);
+        }
+    }
+
+    /// <summary>
+    /// Save match result to backend API
+    /// </summary>
+    private void SaveMatchToBackend(int winner)
+    {
+        // Get player IDs
+        int player1BackendId = localPlayerId;
+        int player2BackendId = GetOpponentPlayerId();
+    
+        // For single-player demo, we can skip if opponent ID not set
+        if (player1BackendId <= 0 || player2BackendId <= 0)
+        {
+            Debug.Log("⚠️ Skipping backend save - player IDs not set (single player mode)");
+            return;
+        }
+    
+        // Determine winner ID (null for draw)
+        int? winnerBackendId = null;
+        if (winner == 1)
+        {
+            winnerBackendId = player1BackendId;
+        }
+        else if (winner == 2)
+        {
+            winnerBackendId = player2BackendId;
+        }
+    
+        // Save to backend
+        StartCoroutine(APIManager.Instance.SaveMatch(
+            player1BackendId,
+            player2BackendId,
+            winnerBackendId,
+            success =>
+            {
+                if (success)
+                {
+                    Debug.Log("✅ Match saved to backend");
+                }
+            }
+        ));
+    }
+    
+    /// <summary>
+    /// Set the local player's backend ID (called after login)
+    /// </summary>
+    public void SetLocalPlayerId(int playerId)
+    {
+        localPlayerId = playerId;
+        Debug.Log($"Local player backend ID set to: {playerId}");
+    }
+
+    /// <summary>
+    /// Get the opponent's backend player ID
+    /// Returns -1 if not set or if playing locally without backend
+    /// </summary>
+    private int GetOpponentPlayerId()
+    {
+        // In a real multiplayer game, you'd get this from the other player
+        // For demo purposes, we'll use a dummy ID or let it be -1
+        // You can extend this later to properly sync player IDs across network
+        return -1; // Placeholder - replace with actual opponent ID in full implementation
     }
 }

@@ -61,6 +61,9 @@ public class BoardUI : MonoBehaviour
     
         // Don't update board until we have both
         if (gameManager == null || runner == null) return;
+        
+        // Check if GameManager's NetworkObject is spawned
+        if (gameManager.Object == null || !gameManager.Object.IsValid) return;
 
         UpdateBoard(gameManager);
         UpdateStatus(gameManager);

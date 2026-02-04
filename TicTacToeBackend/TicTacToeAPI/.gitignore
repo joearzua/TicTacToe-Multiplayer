@@ -1,0 +1,29 @@
+# .NET build artifacts
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Entity Framework migrations (keep these)
+!Migrations/
+
+# Sensitive files
+appsettings.Development.json
+
+# IDE files
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
