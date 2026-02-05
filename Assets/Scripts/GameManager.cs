@@ -2,8 +2,9 @@ using Fusion;
 using UnityEngine;
 
 /// <summary>
-/// Server-authoritative Tic-Tac-Toe game manager
-/// Host validates all moves, clients just send requests
+/// Server-authoritative game manager for Tic-Tac-Toe multiplayer.
+/// Handles all game logic, move validation, win detection, and backend integration.
+/// Runs on Photon Fusion's state authority to prevent cheating.
 /// </summary>
 public class GameManager : NetworkBehaviour
 {
@@ -13,7 +14,7 @@ public class GameManager : NetworkBehaviour
     [Networked] public NetworkString<_16> Player2Name { get; set; }
     [Networked] public int Player1Elo { get; set; }
     [Networked] public int Player2Elo { get; set; }
-    [Networked, Capacity(9)] public NetworkArray<int> Board => default; // 0=empty, 1=player1, 2=player2
+    [Networked, Capacity(9)] public NetworkArray<int> Board => default;
 
     [Networked] public int CurrentPlayer { get; set; } = 1;
     [Networked] public int Winner { get; set; } = 0;
@@ -24,19 +25,9 @@ public class GameManager : NetworkBehaviour
 
     public override void Spawned()
     {
-        Debug.Log($"🎮 GameManager.Spawned() called!");
-        Debug.Log($"   HasStateAuthority: {Object.HasStateAuthority}");
-        Debug.Log($"   IsValid: {Object.IsValid}");
-
-        // Initialize game when this NetworkObject spawns
-        if (Object.HasStateAuthority) // Only HOST runs this
+        if (Object.HasStateAuthority)
         {
-            Debug.Log($"   Initializing game as HOST");
             InitializeGame();
-        }
-        else
-        {
-            Debug.Log($"   Not host, skipping initialization");
         }
     }
 
@@ -47,131 +38,95 @@ public class GameManager : NetworkBehaviour
     {
         for (int i = 0; i < 9; i++)
         {
-            Board.Set(i, 0); // Empty cells
+            Board.Set(i, 0);
         }
 
         CurrentPlayer = 1;
         Winner = 0;
         GameOver = false;
 
-        Debug.Log("🎮 Game initialized by host (server authority)");
+        Debug.Log("🎮 Game initialized by host");
     }
 
     /// <summary>
-    /// Client requests to make a move
-    /// RPC = Remote Procedure Call (client → host)
+    /// RPC called by clients to request a move. Validates and executes on server.
     /// </summary>
+    /// <param name="position">Board position (0-8)</param>
+    /// <param name="player">PlayerRef making the move</param>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_RequestMove(int position, PlayerRef player)
     {
-        Debug.Log($"📥 Move request: Position {position} from {player}");
-
-        // SERVER VALIDATES MOVE (anti-cheat)
         if (!ValidateMove(position, player))
         {
-            Debug.LogWarning($"❌ Invalid move rejected: Position {position}");
             RPC_MoveRejected(player, "Invalid move");
             return;
         }
 
-        // Server executes move
         ExecuteMove(position, player);
     }
 
     /// <summary>
-    /// SERVER VALIDATES MOVE (prevents cheating)
-    /// This is the key anti-cheat pattern
+    /// Validates move on server to prevent cheating
     /// </summary>
+    /// <param name="position">Board position</param>
+    /// <param name="player">PlayerRef attempting move</param>
+    /// <returns>True if move is valid</returns>
     private bool ValidateMove(int position, PlayerRef player)
     {
-        // Check 1: Game not over
-        if (GameOver)
-        {
-            Debug.Log("Game is over");
-            return false;
-        }
+        if (GameOver) return false;
+        if (position < 0 || position > 8) return false;
+        if (Board[position] != 0) return false;
 
-        // Check 2: Valid position (0-8)
-        if (position < 0 || position > 8)
-        {
-            Debug.Log("Invalid position");
-            return false;
-        }
-
-        // Check 3: Cell is empty
-        if (Board[position] != 0)
-        {
-            Debug.Log("Cell occupied");
-            return false;
-        }
-
-        // Check 4: Correct player's turn
         int playerNumber = GetPlayerNumber(player);
-        if (playerNumber != CurrentPlayer)
-        {
-            Debug.Log($"Not player {playerNumber}'s turn (current: {CurrentPlayer})");
-            return false;
-        }
+        if (playerNumber != CurrentPlayer) return false;
+        if (playerNumber == 0) return false;
 
-        // Check 5: Player is registered
-        if (playerNumber == 0)
-        {
-            Debug.Log("Player not registered");
-            return false;
-        }
-
-        return true; // All checks passed
+        return true;
     }
 
     /// <summary>
-    /// SERVER EXECUTES VALIDATED MOVE
-    /// Only host runs this - clients receive state updates
+    /// Executes validated move on server and checks for win/draw
     /// </summary>
+    /// <param name="position">Board position</param>
+    /// <param name="player">PlayerRef making the move</param>
     private void ExecuteMove(int position, PlayerRef player)
     {
         int playerNumber = GetPlayerNumber(player);
-
-        // Place mark on board
         Board.Set(position, playerNumber);
 
-        Debug.Log($"✓ Move executed: Player {playerNumber} → Position {position}");
-
-        // Check win condition
         if (CheckWin(playerNumber))
         {
             Winner = playerNumber;
             GameOver = true;
-            Debug.Log($"🎉 PLAYER {playerNumber} WINS!");
+            Debug.Log($"🎮 Game Over: PLAYER {playerNumber} WINS!");
             RPC_GameOver(Winner);
             return;
         }
 
-        // Check draw
         if (IsBoardFull())
         {
-            Winner = 0; // Draw
+            Winner = 0;
             GameOver = true;
-            Debug.Log($"🤝 DRAW!");
+            Debug.Log($"🎮 Game Over: DRAW!");
             RPC_GameOver(0);
             return;
         }
 
-        // Switch turn
         CurrentPlayer = (CurrentPlayer == 1) ? 2 : 1;
-        Debug.Log($"🔄 Turn switched to Player {CurrentPlayer}");
     }
 
     /// <summary>
-    /// Check if player won
+    /// Check if current board state is a win for the given player
     /// </summary>
+    /// <param name="player">1 or 2</param>
+    /// <returns>True if player has won</returns>
     private bool CheckWin(int player)
     {
-        // Win patterns (rows, columns, diagonals)
         int[,] patterns = new int[,]
         {
-            { 0, 1, 2 }, { 3, 4, 5 }, { 6, 7, 8 }, // Rows
-            { 0, 3, 6 }, { 1, 4, 7 }, { 2, 5, 8 }, // Columns
-            { 0, 4, 8 }, { 2, 4, 6 } // Diagonals
+            { 0, 1, 2 }, { 3, 4, 5 }, { 6, 7, 8 },
+            { 0, 3, 6 }, { 1, 4, 7 }, { 2, 5, 8 },
+            { 0, 4, 8 }, { 2, 4, 6 }
         };
 
         for (int i = 0; i < 8; i++)
@@ -188,8 +143,9 @@ public class GameManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Check if board is full (draw)
+    /// Check if board is full (draw condition)
     /// </summary>
+    /// <returns>True if all cells occupied</returns>
     private bool IsBoardFull()
     {
         for (int i = 0; i < 9; i++)
@@ -201,7 +157,7 @@ public class GameManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Reset game (server only)
+    /// Reset game to initial state (server only)
     /// </summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_RequestReset()
@@ -209,13 +165,14 @@ public class GameManager : NetworkBehaviour
         if (Object.HasStateAuthority)
         {
             InitializeGame();
-            Debug.Log("🔄 Game reset by host");
         }
     }
 
     /// <summary>
-    /// Get player number (1 or 2) from PlayerRef
+    /// Get player number from PlayerRef
     /// </summary>
+    /// <param name="player">PlayerRef to check</param>
+    /// <returns>1 or 2, or 0 if not registered</returns>
     private int GetPlayerNumber(PlayerRef player)
     {
         if (player == Player1) return 1;
@@ -224,19 +181,16 @@ public class GameManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Register player with their backend info (name, ELO)
+    /// Register player with backend info (username, ELO, backend ID)
     /// </summary>
+    /// <param name="username">Player's username</param>
+    /// <param name="elo">Player's ELO rating</param>
+    /// <param name="backendId">Player's backend database ID</param>
+    /// <param name="player">PlayerRef to register</param>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void RPC_RegisterPlayerWithInfo(string username, int elo, int backendId, PlayerRef player)
     {
-        Debug.Log(
-            $"🎯 RPC_RegisterPlayerWithInfo called: {username}, ELO: {elo}, BackendID: {backendId}, Player: {player}");
-
-        if (!Object.HasStateAuthority)
-        {
-            Debug.LogWarning("   ⚠️ Not state authority - ignoring");
-            return;
-        }
+        if (!Object.HasStateAuthority) return;
 
         if (Player1 == PlayerRef.None)
         {
@@ -244,7 +198,7 @@ public class GameManager : NetworkBehaviour
             Player1Name = username;
             Player1Elo = elo;
             Player1BackendId = backendId;
-            Debug.Log($"✅ Player 1 registered: {username} (ELO: {elo}, BackendID: {backendId})");
+            Debug.Log($"Player 1 registered: {username} (ELO: {elo})");
         }
         else if (Player2 == PlayerRef.None)
         {
@@ -252,36 +206,31 @@ public class GameManager : NetworkBehaviour
             Player2Name = username;
             Player2Elo = elo;
             Player2BackendId = backendId;
-            Debug.Log($"✅ Player 2 registered: {username} (ELO: {elo}, BackendID: {backendId})");
-        }
-        else
-        {
-            Debug.LogWarning($"⚠️ Both player slots full - cannot register {username}");
+            Debug.Log($"Player 2 registered: {username} (ELO: {elo})");
         }
     }
 
     /// <summary>
     /// Notify client their move was rejected
     /// </summary>
+    /// <param name="player">PlayerRef whose move was rejected</param>
+    /// <param name="reason">Rejection reason</param>
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_MoveRejected(PlayerRef player, string reason)
     {
         if (Runner.LocalPlayer == player)
         {
-            Debug.LogWarning($"❌ Your move was rejected: {reason}");
+            Debug.LogWarning($"Move rejected: {reason}");
         }
     }
 
     /// <summary>
-    /// Notify all clients game is over
+    /// Notify all clients game is over and save to backend
     /// </summary>
+    /// <param name="winner">1 for Player 1, 2 for Player 2, 0 for draw</param>
     [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
     private void RPC_GameOver(int winner)
     {
-        string message = winner == 0 ? "DRAW!" : $"PLAYER {winner} WINS!";
-        Debug.Log($"🎮 Game Over: {message}");
-
-        // Save match to backend (if logged in)
         if (APIManager.Instance != null && APIManager.Instance.IsLoggedIn && Object.HasStateAuthority)
         {
             SaveMatchToBackend(winner);
@@ -289,36 +238,26 @@ public class GameManager : NetworkBehaviour
     }
 
     /// <summary>
-    /// Save match result to backend API
+    /// Save match result to backend API and update ELO ratings
     /// </summary>
+    /// <param name="winner">1 for Player 1, 2 for Player 2, 0 for draw</param>
     private void SaveMatchToBackend(int winner)
     {
-        // Get player backend IDs (now synced across network)
         int player1BackendId = Player1BackendId;
         int player2BackendId = Player2BackendId;
 
-        // Check if both players have valid backend IDs
         if (player1BackendId <= 0 || player2BackendId <= 0)
         {
-            Debug.Log("⚠️ Skipping backend save - one or both players not logged in");
+            Debug.Log("Skipping backend save - players not logged in");
             return;
         }
 
-        // Determine winner backend ID (null for draw)
         int? winnerBackendId = null;
-        if (winner == 1)
-        {
-            winnerBackendId = player1BackendId;
-        }
-        else if (winner == 2)
-        {
-            winnerBackendId = player2BackendId;
-        }
+        if (winner == 1) winnerBackendId = player1BackendId;
+        else if (winner == 2) winnerBackendId = player2BackendId;
 
-        Debug.Log(
-            $"💾 Saving match to backend: P1={player1BackendId}, P2={player2BackendId}, Winner={winnerBackendId}");
+        Debug.Log($"💾 Saving match to backend...");
 
-        // Save to backend
         StartCoroutine(APIManager.Instance.SaveMatch(
             player1BackendId,
             player2BackendId,
@@ -327,11 +266,11 @@ public class GameManager : NetworkBehaviour
             {
                 if (success)
                 {
-                    Debug.Log("✅ Match saved to backend - ELO ratings updated");
+                    Debug.Log("Match saved - ELO updated");
                 }
                 else
                 {
-                    Debug.LogError("❌ Failed to save match to backend");
+                    Debug.LogError("Failed to save match");
                 }
             }
         ));

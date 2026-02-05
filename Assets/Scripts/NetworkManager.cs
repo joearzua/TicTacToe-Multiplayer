@@ -6,6 +6,11 @@ using Fusion.Sockets;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+/// <summary>
+/// Manages Photon Fusion networking and matchmaking.
+/// Implements lobby-based matchmaking to automatically pair players.
+/// Handles host migration and player registration.
+/// </summary>
 public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
     [SerializeField] private NetworkRunner runnerPrefab;
@@ -13,21 +18,23 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     [SerializeField] private int maxPlayersPerRoom = 2;
 
     private NetworkRunner runner;
-    private bool hasRegisteredPlayer = false;
+    private bool hasRegisteredPlayer;
     private LoginUI loginUI;
-    private bool isSearchingForMatch = false;
+    private bool isSearchingForMatch;
     private List<SessionInfo> availableSessions = new List<SessionInfo>();
 
+    /// <summary>
+    /// Start matchmaking process - searches for available matches or creates new room
+    /// </summary>
     public async void StartMatchmaking()
     {
-        Debug.Log("🔍 Starting matchmaking...");
+        Debug.Log("Starting matchmaking...");
         hasRegisteredPlayer = false;
         isSearchingForMatch = true;
 
         loginUI = FindObjectOfType<LoginUI>();
         if (loginUI != null) loginUI.ShowSearchingStatus("Finding a match...");
 
-        // Create runner for session browsing
         runner = Instantiate(runnerPrefab);
         runner.name = "NetworkRunner";
         runner.AddCallbacks(this);
@@ -40,41 +47,36 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         {
             var sceneManager = runner.gameObject.AddComponent<NetworkSceneManagerDefault>();
 
-            // Start in Shared mode and join lobby to see available sessions
             var result = await runner.JoinSessionLobby(SessionLobby.Shared);
 
             if (!result.Ok)
             {
-                Debug.LogError($"❌ Failed to join lobby: {result.ShutdownReason}");
+                Debug.LogError($"Failed to join lobby: {result.ShutdownReason}");
                 if (loginUI != null) loginUI.ShowSearchingStatus("Connection failed. Please restart.");
                 return;
             }
 
-            Debug.Log("✅ Joined lobby, searching for available matches...");
-
-            // Wait a moment for session list to populate
+            Debug.Log("Joined lobby");
             await System.Threading.Tasks.Task.Delay(1000);
-
-            // Try to find and join an available session
             await TryJoinOrCreateSession(sceneManager, info);
         }
         catch (Exception e)
         {
-            Debug.LogError($"❌ Error: {e.Message}");
+            Debug.LogError($"Error: {e.Message}");
             if (loginUI != null) loginUI.ShowSearchingStatus("Connection failed. Please restart.");
         }
     }
 
+    /// <summary>
+    /// Attempt to join or create a session based on available rooms
+    /// </summary>
     private async System.Threading.Tasks.Task TryJoinOrCreateSession(NetworkSceneManagerDefault sceneManager,
         NetworkSceneInfo info)
     {
-        // Look for a session with space
         SessionInfo targetSession = null;
 
         foreach (var session in availableSessions)
         {
-            Debug.Log($"📋 Found session: {session.Name} ({session.PlayerCount}/{session.MaxPlayers})");
-
             if (session.PlayerCount < session.MaxPlayers && session.IsOpen)
             {
                 targetSession = session;
@@ -86,8 +88,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (targetSession != null)
         {
-            // Join existing session
-            Debug.Log($"🎯 Joining existing match: {targetSession.Name}");
+            Debug.Log($"Joining match: {targetSession.Name}");
             if (loginUI != null) loginUI.ShowSearchingStatus($"Match found! Joining...");
 
             result = await runner.StartGame(new StartGameArgs()
@@ -101,9 +102,8 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
         else
         {
-            // Create new session with unique name
             string sessionName = $"Match_{Guid.NewGuid().ToString().Substring(0, 8)}";
-            Debug.Log($"🆕 No available matches, creating: {sessionName}");
+            Debug.Log($"Creating new match: {sessionName}");
             if (loginUI != null) loginUI.ShowSearchingStatus("Creating new match...");
 
             result = await runner.StartGame(new StartGameArgs()
@@ -120,41 +120,40 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
         if (result.Ok)
         {
-            Debug.Log("✅ Connected to match!");
+            Debug.Log("Connected to match!");
             if (loginUI != null) loginUI.ShowGame();
         }
         else
         {
-            Debug.LogError($"❌ Failed to connect: {result.ShutdownReason}");
+            Debug.LogError($"Failed to connect: {result.ShutdownReason}");
             if (loginUI != null) loginUI.ShowSearchingStatus("Connection failed. Please restart.");
         }
     }
 
+    /// <summary>
+    /// Called when session list is updated from Photon lobby
+    /// </summary>
     public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList)
     {
-        Debug.Log($"📋 Session list updated: {sessionList.Count} sessions found");
         availableSessions = sessionList;
-
-        foreach (var session in sessionList)
-        {
-            Debug.Log($"   - {session.Name}: {session.PlayerCount}/{session.MaxPlayers} (Open: {session.IsOpen})");
-        }
     }
 
     public void OnConnectedToServer(NetworkRunner runner)
     {
-        Debug.Log($"✓ Connected! Master: {runner.IsSharedModeMasterClient}, LocalPlayer: {runner.LocalPlayer}");
+        Debug.Log($"Connected to server");
     }
 
     public void OnSceneLoadDone(NetworkRunner runner)
     {
-        Debug.Log($"✓ Scene loaded! Master: {runner.IsSharedModeMasterClient}");
         TrySpawnGameManager();
     }
 
+    /// <summary>
+    /// Handle host migration when original host disconnects
+    /// </summary>
     public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
     {
-        Debug.Log("👑 Host migration - I am now master client!");
+        Debug.Log("Host migration - I am now master client!");
         StartCoroutine(DelayedHostMigrationCheck());
     }
 
@@ -162,41 +161,35 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         yield return null;
         yield return null;
-
         TrySpawnGameManager();
     }
 
+    /// <summary>
+    /// Spawn GameManager prefab when acting as host
+    /// </summary>
     private void TrySpawnGameManager()
     {
-        if (!runner.IsSharedModeMasterClient)
-        {
-            Debug.Log("   Not master client, skipping spawn");
-            return;
-        }
+        if (!runner.IsSharedModeMasterClient) return;
 
         var existing = FindObjectOfType<GameManager>();
         if (existing != null && existing.Object != null && existing.Object.IsValid)
         {
-            Debug.Log("✅ GameManager already exists");
             return;
         }
-
-        Debug.Log("✅ I AM HOST - SPAWNING GAMEMANAGER");
 
         if (gameManagerPrefab != null)
         {
             runner.Spawn(gameManagerPrefab, Vector3.zero, Quaternion.identity);
+            Debug.Log("GameManager spawned");
         }
         else
         {
-            Debug.LogError("❌ gameManagerPrefab is NULL!");
+            Debug.LogError("gameManagerPrefab is NULL!");
         }
     }
 
     public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"✓ Player joined: {player} (Me: {runner.LocalPlayer})");
-
         if (player == runner.LocalPlayer && !hasRegisteredPlayer)
         {
             StartCoroutine(RegisterPlayer(runner, player));
@@ -205,8 +198,6 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
-        Debug.Log($"👋 Player left: {player}");
-
         if (runner.IsSharedModeMasterClient)
         {
             StartCoroutine(CheckGameManagerAfterPlayerLeft());
@@ -220,15 +211,16 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         var gm = FindObjectOfType<GameManager>();
         if (gm == null || gm.Object == null || !gm.Object.IsValid)
         {
-            Debug.Log("🔄 GameManager was destroyed with previous host, respawning...");
             TrySpawnGameManager();
-
             yield return new WaitForSeconds(0.5f);
             hasRegisteredPlayer = false;
             StartCoroutine(RegisterPlayer(runner, runner.LocalPlayer));
         }
     }
 
+    /// <summary>
+    /// Register player with backend info once GameManager is ready
+    /// </summary>
     private IEnumerator RegisterPlayer(NetworkRunner runner, PlayerRef player)
     {
         yield return new WaitForSeconds(0.5f);
@@ -238,7 +230,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             var gm = FindObjectOfType<GameManager>();
             if (gm != null && gm.Object != null && gm.Object.IsValid)
             {
-                Debug.Log($"✅ Registering {APIManager.Instance.CurrentUsername}");
+                Debug.Log($"Registering {APIManager.Instance.CurrentUsername}");
                 gm.RPC_RegisterPlayerWithInfo(
                     APIManager.Instance.CurrentUsername,
                     APIManager.Instance.CurrentEloRating,
@@ -252,58 +244,20 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             yield return new WaitForSeconds(0.1f);
         }
 
-        Debug.LogError("❌ GameManager never appeared!");
+        Debug.LogError("GameManager never appeared!");
     }
 
-    public void OnInput(NetworkRunner runner, NetworkInput input)
-    {
-    }
-
-    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input)
-    {
-    }
-
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
-    {
-    }
-
-    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
-    {
-    }
-
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
-    {
-    }
-
-    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
-    {
-    }
-
-    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message)
-    {
-    }
-
-    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data)
-    {
-    }
-
-    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
-    {
-    }
-
-    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress)
-    {
-    }
-
-    public void OnSceneLoadStart(NetworkRunner runner)
-    {
-    }
-
-    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
-    {
-    }
-
-    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
-    {
-    }
+    public void OnInput(NetworkRunner runner, NetworkInput input) { }
+    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
+    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
+    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
+    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
+    public void OnSceneLoadStart(NetworkRunner runner) { }
+    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
+    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
 }
