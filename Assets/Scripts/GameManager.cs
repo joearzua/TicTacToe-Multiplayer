@@ -7,12 +7,14 @@ using UnityEngine;
 /// </summary>
 public class GameManager : NetworkBehaviour
 {
-    [Header("Backend Integration")]
-    private int localPlayerId = -1;
-    
-    [Networked, Capacity(9)] 
-    public NetworkArray<int> Board => default; // 0=empty, 1=player1, 2=player2
-    
+    [Networked] public NetworkString<_16> Player1Name { get; set; }
+    [Networked] public NetworkString<_16> Player2Name { get; set; }
+    [Networked] public int Player1Elo { get; set; }
+    [Networked] public int Player2Elo { get; set; }
+    [Header("Backend Integration")] private int localPlayerId = -1;
+
+    [Networked, Capacity(9)] public NetworkArray<int> Board => default; // 0=empty, 1=player1, 2=player2
+
     [Networked] public int CurrentPlayer { get; set; } = 1;
     [Networked] public int Winner { get; set; } = 0;
     [Networked] public bool GameOver { get; set; } = false;
@@ -38,10 +40,11 @@ public class GameManager : NetworkBehaviour
         {
             Board.Set(i, 0); // Empty cells
         }
+
         CurrentPlayer = 1;
         Winner = 0;
         GameOver = false;
-        
+
         Debug.Log("🎮 Game initialized by host (server authority)");
     }
 
@@ -118,10 +121,10 @@ public class GameManager : NetworkBehaviour
     private void ExecuteMove(int position, PlayerRef player)
     {
         int playerNumber = GetPlayerNumber(player);
-        
+
         // Place mark on board
         Board.Set(position, playerNumber);
-        
+
         Debug.Log($"✓ Move executed: Player {playerNumber} → Position {position}");
 
         // Check win condition
@@ -157,16 +160,16 @@ public class GameManager : NetworkBehaviour
         // Win patterns (rows, columns, diagonals)
         int[,] patterns = new int[,]
         {
-            {0,1,2}, {3,4,5}, {6,7,8}, // Rows
-            {0,3,6}, {1,4,7}, {2,5,8}, // Columns
-            {0,4,8}, {2,4,6}           // Diagonals
+            { 0, 1, 2 }, { 3, 4, 5 }, { 6, 7, 8 }, // Rows
+            { 0, 3, 6 }, { 1, 4, 7 }, { 2, 5, 8 }, // Columns
+            { 0, 4, 8 }, { 2, 4, 6 } // Diagonals
         };
 
         for (int i = 0; i < 8; i++)
         {
-            if (Board[patterns[i,0]] == player &&
-                Board[patterns[i,1]] == player &&
-                Board[patterns[i,2]] == player)
+            if (Board[patterns[i, 0]] == player &&
+                Board[patterns[i, 1]] == player &&
+                Board[patterns[i, 2]] == player)
             {
                 return true;
             }
@@ -184,6 +187,7 @@ public class GameManager : NetworkBehaviour
         {
             if (Board[i] == 0) return false;
         }
+
         return true;
     }
 
@@ -210,20 +214,39 @@ public class GameManager : NetworkBehaviour
         return 0;
     }
 
-    public void RegisterPlayer(PlayerRef player)
+    /// <summary>
+    /// Register player with their backend info (name, ELO)
+    /// </summary>
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void RPC_RegisterPlayerWithInfo(string username, int elo, PlayerRef player)
     {
-        if (!Object.HasStateAuthority) return;
+        Debug.Log($"🎯 RPC_RegisterPlayerWithInfo called: {username}, ELO: {elo}, Player: {player}");
+        Debug.Log($"   HasStateAuthority: {Object.HasStateAuthority}");
+        Debug.Log($"   Current Player1: {Player1}, Player2: {Player2}");
+
+        if (!Object.HasStateAuthority)
+        {
+            Debug.LogWarning("   ⚠️ Not state authority - ignoring");
+            return;
+        }
 
         if (Player1 == PlayerRef.None)
         {
             Player1 = player;
-            Debug.Log($"✓ Player 1 joined: {player}");
+            Player1Name = username;
+            Player1Elo = elo;
+            Debug.Log($"✅ Player 1 registered: {username} (ELO: {elo})");
         }
         else if (Player2 == PlayerRef.None)
         {
             Player2 = player;
-            Debug.Log($"✓ Player 2 joined: {player}");
-            Debug.Log($"🎮 Both players connected - game ready!");
+            Player2Name = username;
+            Player2Elo = elo;
+            Debug.Log($"✅ Player 2 registered: {username} (ELO: {elo})");
+        }
+        else
+        {
+            Debug.LogWarning($"⚠️ Both player slots full - cannot register {username}");
         }
     }
 
@@ -247,7 +270,7 @@ public class GameManager : NetworkBehaviour
     {
         string message = winner == 0 ? "DRAW!" : $"PLAYER {winner} WINS!";
         Debug.Log($"🎮 Game Over: {message}");
-    
+
         // Save match to backend (if logged in)
         if (APIManager.Instance != null && APIManager.Instance.IsLoggedIn && Object.HasStateAuthority)
         {
@@ -263,14 +286,14 @@ public class GameManager : NetworkBehaviour
         // Get player IDs
         int player1BackendId = localPlayerId;
         int player2BackendId = GetOpponentPlayerId();
-    
+
         // For single-player demo, we can skip if opponent ID not set
         if (player1BackendId <= 0 || player2BackendId <= 0)
         {
             Debug.Log("⚠️ Skipping backend save - player IDs not set (single player mode)");
             return;
         }
-    
+
         // Determine winner ID (null for draw)
         int? winnerBackendId = null;
         if (winner == 1)
@@ -281,7 +304,7 @@ public class GameManager : NetworkBehaviour
         {
             winnerBackendId = player2BackendId;
         }
-    
+
         // Save to backend
         StartCoroutine(APIManager.Instance.SaveMatch(
             player1BackendId,
@@ -296,7 +319,7 @@ public class GameManager : NetworkBehaviour
             }
         ));
     }
-    
+
     /// <summary>
     /// Set the local player's backend ID (called after login)
     /// </summary>
