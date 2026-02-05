@@ -4269,6 +4269,8 @@ MonoBehaviour:
   - {fileID: 133488109}
   - {fileID: 1763921962}
   statusText: {fileID: 1013364977}
+  resetButton: {fileID: 850479325}
+  showLeaderboardButton: {fileID: 160699716}
   currentTheme: {fileID: 11400000, guid: 8947817486f18ea42b4c94c65d515632, type: 2}
 --- !u!1 &980927794
 GameObject:

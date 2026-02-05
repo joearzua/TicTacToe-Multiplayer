@@ -14,6 +14,8 @@ public class ThemeManager : MonoBehaviour
 
     [SerializeField] private Button[] cellButtons;
     [SerializeField] private TextMeshProUGUI statusText;
+    [SerializeField] private Button resetButton;
+    [SerializeField] private Button showLeaderboardButton;
 
     [Header("Current Theme")] [SerializeField]
     private BoardTheme currentTheme;
@@ -111,6 +113,24 @@ public class ThemeManager : MonoBehaviour
         if (statusText != null)
         {
             statusText.color = theme.statusTextColor;
+        }
+
+        // Apply reset button color
+        if (resetButton != null)
+        {
+            var colors = resetButton.colors;
+            colors.normalColor = theme.buttonColor;
+            resetButton.colors = colors;
+            resetButton.GetComponentInChildren<TextMeshProUGUI>().color = theme.buttonTextColor;
+        }
+        
+        //Apply show leaderboard button
+        if (showLeaderboardButton != null)
+        {
+            var colors = showLeaderboardButton.colors;
+            colors.normalColor = theme.buttonColor;
+            showLeaderboardButton.colors = colors;
+            showLeaderboardButton.GetComponentInChildren<TextMeshProUGUI>().color = theme.buttonTextColor;
         }
     }
 
