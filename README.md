@@ -53,7 +53,7 @@
 TicTacToe-Multiplayer/
 ├── Assets/
 │   ├── Scripts/
-│   │   ├── GameManager.cs         # Server-side game logic
+│   │   ├── GameManager.cs          # Server-side game logic
 │   │   ├── BoardUI.cs              # Client-side UI
 │   │   ├── NetworkManager.cs       # Photon connection
 │   │   ├── APIManager.cs           # HTTP requests to backend
@@ -245,5 +245,6 @@ Architectural patterns (server authority, RPC validation, client/server separati
 ## 📄 License
 
 This project is for portfolio and educational purposes.
+
 
 
