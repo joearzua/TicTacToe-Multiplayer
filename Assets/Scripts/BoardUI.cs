@@ -184,7 +184,7 @@ public class BoardUI : MonoBehaviour
             else
             {
                 bool iWon = IsLocalPlayer(gm, gm.Winner);
-                statusText.text = iWon ? "YOU WIN! 🎉" : $"PLAYER {gm.Winner} WINS!";
+                statusText.text = iWon ? "YOU WIN!" : $"PLAYER {gm.Winner} WINS!";
                 statusText.color = iWon ? Color.green : Color.red;
             }
         }
