@@ -23,7 +23,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         Debug.Log("🔍 Starting matchmaking...");
         hasRegisteredPlayer = false;
         isSearchingForMatch = true;
-        
+
         loginUI = FindObjectOfType<LoginUI>();
         if (loginUI != null) loginUI.ShowSearchingStatus("Finding a match...");
 
@@ -51,10 +51,10 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
             }
 
             Debug.Log("✅ Joined lobby, searching for available matches...");
-            
+
             // Wait a moment for session list to populate
             await System.Threading.Tasks.Task.Delay(1000);
-            
+
             // Try to find and join an available session
             await TryJoinOrCreateSession(sceneManager, info);
         }
@@ -65,15 +65,16 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
     }
 
-    private async System.Threading.Tasks.Task TryJoinOrCreateSession(NetworkSceneManagerDefault sceneManager, NetworkSceneInfo info)
+    private async System.Threading.Tasks.Task TryJoinOrCreateSession(NetworkSceneManagerDefault sceneManager,
+        NetworkSceneInfo info)
     {
         // Look for a session with space
         SessionInfo targetSession = null;
-        
+
         foreach (var session in availableSessions)
         {
             Debug.Log($"📋 Found session: {session.Name} ({session.PlayerCount}/{session.MaxPlayers})");
-            
+
             if (session.PlayerCount < session.MaxPlayers && session.IsOpen)
             {
                 targetSession = session;
@@ -82,7 +83,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         StartGameResult result;
-        
+
         if (targetSession != null)
         {
             // Join existing session
@@ -161,7 +162,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     {
         yield return null;
         yield return null;
-        
+
         TrySpawnGameManager();
     }
 
@@ -181,7 +182,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
         }
 
         Debug.Log("✅ I AM HOST - SPAWNING GAMEMANAGER");
-        
+
         if (gameManagerPrefab != null)
         {
             runner.Spawn(gameManagerPrefab, Vector3.zero, Quaternion.identity);
@@ -205,7 +206,7 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
     {
         Debug.Log($"👋 Player left: {player}");
-        
+
         if (runner.IsSharedModeMasterClient)
         {
             StartCoroutine(CheckGameManagerAfterPlayerLeft());
@@ -215,13 +216,13 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
     private IEnumerator CheckGameManagerAfterPlayerLeft()
     {
         yield return new WaitForSeconds(0.5f);
-        
+
         var gm = FindObjectOfType<GameManager>();
         if (gm == null || gm.Object == null || !gm.Object.IsValid)
         {
             Debug.Log("🔄 GameManager was destroyed with previous host, respawning...");
             TrySpawnGameManager();
-            
+
             yield return new WaitForSeconds(0.5f);
             hasRegisteredPlayer = false;
             StartCoroutine(RegisterPlayer(runner, runner.LocalPlayer));
@@ -247,23 +248,62 @@ public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
                 hasRegisteredPlayer = true;
                 yield break;
             }
+
             yield return new WaitForSeconds(0.1f);
         }
 
         Debug.LogError("❌ GameManager never appeared!");
     }
 
-    public void OnInput(NetworkRunner runner, NetworkInput input) { }
-    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
-    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
-    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
-    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
-    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
-    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
-    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
-    public void OnSceneLoadStart(NetworkRunner runner) { }
-    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
-    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
+    public void OnInput(NetworkRunner runner, NetworkInput input)
+    {
+    }
+
+    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input)
+    {
+    }
+
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
+    {
+    }
+
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
+    {
+    }
+
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
+    {
+    }
+
+    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
+    {
+    }
+
+    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message)
+    {
+    }
+
+    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data)
+    {
+    }
+
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
+    {
+    }
+
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress)
+    {
+    }
+
+    public void OnSceneLoadStart(NetworkRunner runner)
+    {
+    }
+
+    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
+    {
+    }
+
+    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
+    {
+    }
 }

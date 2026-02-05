@@ -103,6 +103,16 @@ public class BoardUI : MonoBehaviour
 
     private void UpdateBoard(GameManager gm)
     {
+        // Get current theme colors
+        Color player1Color = Color.blue;
+        Color player2Color = Color.red;
+    
+        if (ThemeManager.Instance != null && ThemeManager.Instance.CurrentTheme != null)
+        {
+            player1Color = ThemeManager.Instance.CurrentTheme.player1Color;
+            player2Color = ThemeManager.Instance.CurrentTheme.player2Color;
+        }
+    
         for (int i = 0; i < 9; i++)
         {
             int cellValue = gm.Board[i];
@@ -115,12 +125,12 @@ public class BoardUI : MonoBehaviour
             else if (cellValue == 1)
             {
                 cellText.text = player1Symbol;
-                cellText.color = Color.blue;
+                cellText.color = player1Color; // ← Uses theme color
             }
             else if (cellValue == 2)
             {
                 cellText.text = player2Symbol;
-                cellText.color = Color.red;
+                cellText.color = player2Color; // ← Uses theme color
             }
         }
     }

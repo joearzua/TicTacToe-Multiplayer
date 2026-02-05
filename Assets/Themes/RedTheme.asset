@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c1602819e0eaf34b95a7dda01e1bd0a, type: 3}
+  m_Name: RedTheme
+  m_EditorClassIdentifier: 
+  themeName: Dark Neon Theme
+  themeDescription: Retro style Dark Neon Theme
+  backgroundColor: {r: 0.7798742, g: 0.08329723, b: 0, a: 1}
+  cellDefaultColor: {r: 0.15, g: 0.1, b: 0.2, a: 1}
+  cellHoverColor: {r: 0.3, g: 0.1, b: 0.4, a: 1}
+  player1Color: {r: 0.89144826, g: 1, b: 0, a: 1}
+  player2Color: {r: 0.8862745, g: 0, b: 0.47275874, a: 1}
+  statusTextColor: {r: 1, g: 0.19999999, b: 0.20812605, a: 1}
+  buttonColor: {r: 0.2, g: 0.1, b: 0.3, a: 1}
+  buttonTextColor: {r: 0, g: 1, b: 1, a: 1}
