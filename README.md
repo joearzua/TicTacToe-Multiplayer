@@ -1,6 +1,6 @@
 # Server-Authoritative Multiplayer Tic-Tac-Toe
 
-Full-stack multiplayer Tic-Tac-Toe built with Unity and ASP.NET Core, demonstrating **server-authoritative architecture**, **backend integration**, and **real-time networking**.
+2D Tic-Tac-Toe game built with Unity and ASP.NET Core, demonstrating **server-authoritative architecture**, **backend integration**, and **real-time networking**.
 
 ---
 
@@ -11,6 +11,7 @@ Full-stack multiplayer Tic-Tac-Toe built with Unity and ASP.NET Core, demonstrat
 - **Server-authoritative game logic** - clients send requests, server validates
 - Turn-based synchronization with state replication
 - Anti-cheat validation (turn order, cell availability, win conditions)
+- Automatic matchmaking via lobby system
 
 ### Backend & Database (ASP.NET Core + MySQL)
 - **REST API** for player accounts and match history
@@ -24,6 +25,11 @@ Full-stack multiplayer Tic-Tac-Toe built with Unity and ASP.NET Core, demonstrat
 - Login/Register UI with validation
 - Automatic match saving after games complete
 - Leaderboard display with real-time updates
+
+### Addressables
+- Board themes loaded from GitHub at runtime
+- Shows modern Unity asset management and clean separation of game logic and UI
+- Remote location: `TicTacToe-Multiplayer/AddressableContent/`
 
 ---
 
@@ -40,12 +46,6 @@ Full-stack multiplayer Tic-Tac-Toe built with Unity and ASP.NET Core, demonstrat
 - MySQL 8.0
 - BCrypt.Net (password hashing)
 
-**Architecture:**
-- Client/Server separation
-- RESTful API design
-- Server-authoritative validation
-- SOLID principles throughout
-
 ---
 
 ## 📁 Project Structure
@@ -53,25 +53,32 @@ Full-stack multiplayer Tic-Tac-Toe built with Unity and ASP.NET Core, demonstrat
 TicTacToe-Multiplayer/
 ├── Assets/
 │   ├── Scripts/
-│   │   ├── GameManager.cs       # Server-side game logic
-│   │   ├── BoardUI.cs           # Client-side UI
-│   │   ├── NetworkManager.cs    # Photon connection
-│   │   ├── APIManager.cs        # HTTP requests to backend
-│   │   ├── LoginUI.cs           # Authentication UI
-│   │   └── LeaderboardUI.cs     # Rankings display
+│   │   ├── GameManager.cs         # Server-side game logic
+│   │   ├── BoardUI.cs              # Client-side UI
+│   │   ├── NetworkManager.cs       # Photon connection
+│   │   ├── APIManager.cs           # HTTP requests to backend
+│   │   ├── LoginUI.cs              # Authentication UI
+│   │   ├── ThemeManager.cs         # Addressables theme loading
+│   │   └── LeaderboardUI.cs        # Rankings display
+│   ├── Themes/
+│   │   ├── ClassicTheme.asset      # Blue/red classic colors
+│   │   └── DarkNeonTheme.asset     # Cyberpunk-inspired theme
 │   └── Scenes/
 │       └── Game.unity
 └── TicTacToeBackend/TicTacToeAPI/
-    ├── Controllers/
-    │   ├── AuthController.cs        # Register/Login endpoints
-    │   ├── MatchesController.cs     # Save matches, update ELO
-    │   └── LeaderboardController.cs # Get top players
-    ├── Models/
-    │   ├── Player.cs                # Player entity
-    │   └── Match.cs                 # Match entity
-    ├── Data/
-    │   └── TicTacToeDbContext.cs    # EF Core DbContext
-    └── Program.cs                   # API configuration
+│   ├── Controllers/
+│    │   ├── AuthController.cs        # Register/Login endpoints
+│    │   ├── MatchesController.cs     # Save matches, update ELO
+│    │   └── LeaderboardController.cs # Get top players
+│    ├── Models/
+│    │   ├── Player.cs                # Player entity
+│    │   └── Match.cs                 # Match entity
+│    ├── Data/
+│    │   └── TicTacToeDbContext.cs    # EF Core DbContext
+│    └── Program.cs                   # API configuration
+└── AddressableContent/               # Remotely loaded assets
+    └── StandaloneWindows64/
+        └── *.bundle                  # Theme bundles
 ```
 
 ---
@@ -136,40 +143,6 @@ API runs on `http://localhost:5248` (or assigned port)
 
 ---
 
-## 🎯 Technical Demonstrations
-
-### Server Authority Pattern
-```csharp
-// Client sends move request (RPC)
-gameManager.RPC_RequestMove(position, runner.LocalPlayer);
-
-// Server validates before executing
-private bool ValidateMove(int position, PlayerRef player)
-{
-    if (GameOver) return false;
-    if (Board[position] != 0) return false;
-    if (GetPlayerNumber(player) != CurrentPlayer) return false;
-    return true;
-}
-```
-
-### Backend Integration
-```csharp
-// Save match & update ELO ratings
-[HttpPost]
-public async Task<ActionResult> SaveMatch([FromBody] MatchRequest request)
-{
-    var player1 = await _context.Players.FindAsync(request.Player1Id);
-    var player2 = await _context.Players.FindAsync(request.Player2Id);
-    
-    UpdateEloRatings(player1, player2, request.WinnerId);
-    
-    await _context.SaveChangesAsync();
-    return Ok();
-}
-```
----
-
 ## 🔒 Security & Best Practices
 
 - Password hashing with BCrypt (never store plaintext)
@@ -178,6 +151,72 @@ public async Task<ActionResult> SaveMatch([FromBody] MatchRequest request)
 - Input validation on all API endpoints
 - Entity Framework prevents SQL injection
 
+---
+## Code Highlights
+
+### Server Authority Pattern
+All game logic runs on the host. Clients send requests, server validates:
+```csharp
+// Client sends move request
+gameManager.RPC_RequestMove(position, runner.LocalPlayer);
+
+// Server validates before executing
+[Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+public void RPC_RequestMove(int position, PlayerRef player)
+{
+    if (!ValidateMove(position, player)) 
+    {
+        RPC_MoveRejected(player, "Invalid move");
+        return;
+    }
+    ExecuteMove(position, player); // Only server executes
+}
+
+private bool ValidateMove(int position, PlayerRef player)
+{
+    if (GameOver) return false;
+    if (Board[position] != 0) return false;
+    if (GetPlayerNumber(player) != CurrentPlayer) return false;
+    return true; // All checks passed
+}
+```
+
+### Automatic Matchmaking
+Lobby-based system finds available matches:
+```csharp
+public async void StartMatchmaking()
+{
+    await runner.JoinSessionLobby(SessionLobby.Shared);
+    
+    // Find session with space
+    foreach (var session in availableSessions)
+    {
+        if (session.PlayerCount < maxPlayers && session.IsOpen)
+        {
+            await JoinSession(session);
+            return;
+        }
+    }
+    
+    CreateNewSession(); // No available matches
+}
+```
+
+### Remote Asset Loading
+Addressables load themes from GitHub at runtime:
+```csharp
+public async void LoadThemeAsync(string themeName)
+{
+    AsyncOperationHandle<BoardTheme> handle = 
+        Addressables.LoadAssetAsync<BoardTheme>(themeName);
+    await handle.Task;
+    
+    if (handle.Status == AsyncOperationStatus.Succeeded)
+    {
+        ApplyTheme(handle.Result);
+    }
+}
+```
 ---
 
 ## 📊 API Endpoints
@@ -206,4 +245,5 @@ Architectural patterns (server authority, RPC validation, client/server separati
 ## 📄 License
 
 This project is for portfolio and educational purposes.
+
 
