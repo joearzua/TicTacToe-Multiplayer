@@ -7,12 +7,12 @@ using UnityEngine;
 /// </summary>
 public class GameManager : NetworkBehaviour
 {
+    [Networked] public int Player1BackendId { get; set; }
+    [Networked] public int Player2BackendId { get; set; }
     [Networked] public NetworkString<_16> Player1Name { get; set; }
     [Networked] public NetworkString<_16> Player2Name { get; set; }
     [Networked] public int Player1Elo { get; set; }
     [Networked] public int Player2Elo { get; set; }
-    [Header("Backend Integration")] private int localPlayerId = -1;
-
     [Networked, Capacity(9)] public NetworkArray<int> Board => default; // 0=empty, 1=player1, 2=player2
 
     [Networked] public int CurrentPlayer { get; set; } = 1;
@@ -24,10 +24,19 @@ public class GameManager : NetworkBehaviour
 
     public override void Spawned()
     {
+        Debug.Log($"🎮 GameManager.Spawned() called!");
+        Debug.Log($"   HasStateAuthority: {Object.HasStateAuthority}");
+        Debug.Log($"   IsValid: {Object.IsValid}");
+
         // Initialize game when this NetworkObject spawns
         if (Object.HasStateAuthority) // Only HOST runs this
         {
+            Debug.Log($"   Initializing game as HOST");
             InitializeGame();
+        }
+        else
+        {
+            Debug.Log($"   Not host, skipping initialization");
         }
     }
 
@@ -218,11 +227,10 @@ public class GameManager : NetworkBehaviour
     /// Register player with their backend info (name, ELO)
     /// </summary>
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void RPC_RegisterPlayerWithInfo(string username, int elo, PlayerRef player)
+    public void RPC_RegisterPlayerWithInfo(string username, int elo, int backendId, PlayerRef player)
     {
-        Debug.Log($"🎯 RPC_RegisterPlayerWithInfo called: {username}, ELO: {elo}, Player: {player}");
-        Debug.Log($"   HasStateAuthority: {Object.HasStateAuthority}");
-        Debug.Log($"   Current Player1: {Player1}, Player2: {Player2}");
+        Debug.Log(
+            $"🎯 RPC_RegisterPlayerWithInfo called: {username}, ELO: {elo}, BackendID: {backendId}, Player: {player}");
 
         if (!Object.HasStateAuthority)
         {
@@ -235,14 +243,16 @@ public class GameManager : NetworkBehaviour
             Player1 = player;
             Player1Name = username;
             Player1Elo = elo;
-            Debug.Log($"✅ Player 1 registered: {username} (ELO: {elo})");
+            Player1BackendId = backendId;
+            Debug.Log($"✅ Player 1 registered: {username} (ELO: {elo}, BackendID: {backendId})");
         }
         else if (Player2 == PlayerRef.None)
         {
             Player2 = player;
             Player2Name = username;
             Player2Elo = elo;
-            Debug.Log($"✅ Player 2 registered: {username} (ELO: {elo})");
+            Player2BackendId = backendId;
+            Debug.Log($"✅ Player 2 registered: {username} (ELO: {elo}, BackendID: {backendId})");
         }
         else
         {
@@ -283,18 +293,18 @@ public class GameManager : NetworkBehaviour
     /// </summary>
     private void SaveMatchToBackend(int winner)
     {
-        // Get player IDs
-        int player1BackendId = localPlayerId;
-        int player2BackendId = GetOpponentPlayerId();
+        // Get player backend IDs (now synced across network)
+        int player1BackendId = Player1BackendId;
+        int player2BackendId = Player2BackendId;
 
-        // For single-player demo, we can skip if opponent ID not set
+        // Check if both players have valid backend IDs
         if (player1BackendId <= 0 || player2BackendId <= 0)
         {
-            Debug.Log("⚠️ Skipping backend save - player IDs not set (single player mode)");
+            Debug.Log("⚠️ Skipping backend save - one or both players not logged in");
             return;
         }
 
-        // Determine winner ID (null for draw)
+        // Determine winner backend ID (null for draw)
         int? winnerBackendId = null;
         if (winner == 1)
         {
@@ -305,6 +315,9 @@ public class GameManager : NetworkBehaviour
             winnerBackendId = player2BackendId;
         }
 
+        Debug.Log(
+            $"💾 Saving match to backend: P1={player1BackendId}, P2={player2BackendId}, Winner={winnerBackendId}");
+
         // Save to backend
         StartCoroutine(APIManager.Instance.SaveMatch(
             player1BackendId,
@@ -314,30 +327,13 @@ public class GameManager : NetworkBehaviour
             {
                 if (success)
                 {
-                    Debug.Log("✅ Match saved to backend");
+                    Debug.Log("✅ Match saved to backend - ELO ratings updated");
+                }
+                else
+                {
+                    Debug.LogError("❌ Failed to save match to backend");
                 }
             }
         ));
-    }
-
-    /// <summary>
-    /// Set the local player's backend ID (called after login)
-    /// </summary>
-    public void SetLocalPlayerId(int playerId)
-    {
-        localPlayerId = playerId;
-        Debug.Log($"Local player backend ID set to: {playerId}");
-    }
-
-    /// <summary>
-    /// Get the opponent's backend player ID
-    /// Returns -1 if not set or if playing locally without backend
-    /// </summary>
-    private int GetOpponentPlayerId()
-    {
-        // In a real multiplayer game, you'd get this from the other player
-        // For demo purposes, we'll use a dummy ID or let it be -1
-        // You can extend this later to properly sync player IDs across network
-        return -1; // Placeholder - replace with actual opponent ID in full implementation
     }
 }

@@ -1,214 +1,269 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
 using Fusion;
 using Fusion.Sockets;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// Handles Photon Fusion connection
-/// Starts game session and manages NetworkRunner
-/// </summary>
 public class NetworkManager : MonoBehaviour, INetworkRunnerCallbacks
 {
-    [Header("Fusion")] [SerializeField] private NetworkRunner runnerPrefab;
+    [SerializeField] private NetworkRunner runnerPrefab;
     [SerializeField] private NetworkObject gameManagerPrefab;
+    [SerializeField] private int maxPlayersPerRoom = 2;
 
     private NetworkRunner runner;
+    private bool hasRegisteredPlayer = false;
+    private LoginUI loginUI;
+    private bool isSearchingForMatch = false;
+    private List<SessionInfo> availableSessions = new List<SessionInfo>();
 
-    public async void StartGameAfterLogin()
+    public async void StartMatchmaking()
     {
-        await StartGame();
-    }
+        Debug.Log("🔍 Starting matchmaking...");
+        hasRegisteredPlayer = false;
+        isSearchingForMatch = true;
+        
+        loginUI = FindObjectOfType<LoginUI>();
+        if (loginUI != null) loginUI.ShowSearchingStatus("Finding a match...");
 
-    /// <summary>
-    /// Start Fusion game session
-    /// </summary>
-    private async Task StartGame()
-    {
-        // Create runner if needed
-        if (runner == null)
-        {
-            runner = Instantiate(runnerPrefab);
-            runner.name = "NetworkRunner";
-            runner.AddCallbacks(this);
-        }
-
-        Debug.Log("Starting Fusion session...");
+        // Create runner for session browsing
+        runner = Instantiate(runnerPrefab);
+        runner.name = "NetworkRunner";
+        runner.AddCallbacks(this);
 
         var sceneRef = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex);
-        NetworkSceneInfo info = new NetworkSceneInfo();
-        info.AddSceneRef(sceneRef, LoadSceneMode.Single);
+        NetworkSceneInfo info = new();
+        info.AddSceneRef(sceneRef);
 
-        // Start game session
-        var result = await runner.StartGame(new StartGameArgs()
+        try
         {
-            GameMode = GameMode.Shared, // Shared mode = one client is host (server)
-            SessionName = "TicTacToe", // Room name
-            Scene = info,
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
-        });
+            var sceneManager = runner.gameObject.AddComponent<NetworkSceneManagerDefault>();
 
-        if (result.Ok)
+            // Start in Shared mode and join lobby to see available sessions
+            var result = await runner.JoinSessionLobby(SessionLobby.Shared);
+
+            if (!result.Ok)
+            {
+                Debug.LogError($"❌ Failed to join lobby: {result.ShutdownReason}");
+                if (loginUI != null) loginUI.ShowSearchingStatus("Connection failed. Please restart.");
+                return;
+            }
+
+            Debug.Log("✅ Joined lobby, searching for available matches...");
+            
+            // Wait a moment for session list to populate
+            await System.Threading.Tasks.Task.Delay(1000);
+            
+            // Try to find and join an available session
+            await TryJoinOrCreateSession(sceneManager, info);
+        }
+        catch (Exception e)
         {
-            Debug.Log("✓ Connected to Photon Fusion");
-            Debug.Log($"🔍 runner.IsServer = {runner.IsServer}");
-            Debug.Log($"🔍 runner.IsClient = {runner.IsClient}");
-            Debug.Log($"🔍 runner.IsSharedModeMasterClient = {runner.IsSharedModeMasterClient}");
-            Debug.Log($"🔍 gameManagerPrefab assigned = {gameManagerPrefab != null}");
-
-            // Spawn GameManager (only host in Shared mode)
-            // if (runner.IsSharedModeMasterClient)
-            // {
-            //     Debug.Log("✅ I am the HOST - Spawning GameManager...");
-            //     var spawnedGM = runner.Spawn(gameManagerPrefab, Vector3.zero, Quaternion.identity);
-            //     Debug.Log($"✅ GameManager spawned: {spawnedGM}");
-            // }
-            // else
-            // {
-            //     Debug.Log("⚠️ I am a CLIENT (not host) - waiting for host to spawn GameManager");
-            // }
+            Debug.LogError($"❌ Error: {e.Message}");
+            if (loginUI != null) loginUI.ShowSearchingStatus("Connection failed. Please restart.");
         }
     }
 
-    #region INetworkRunnerCallbacks
-
-    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
+    private async System.Threading.Tasks.Task TryJoinOrCreateSession(NetworkSceneManagerDefault sceneManager, NetworkSceneInfo info)
     {
-        Debug.Log($"✓ Player joined: {player}");
-        Debug.Log($"   runner.LocalPlayer: {runner.LocalPlayer}");
-        Debug.Log($"   Is this me? {player == runner.LocalPlayer}");
-
-        // If this is the local player, send their backend info
-        if (player == runner.LocalPlayer)
+        // Look for a session with space
+        SessionInfo targetSession = null;
+        
+        foreach (var session in availableSessions)
         {
-            Debug.Log("   This IS the local player - registering with backend info");
+            Debug.Log($"📋 Found session: {session.Name} ({session.PlayerCount}/{session.MaxPlayers})");
+            
+            if (session.PlayerCount < session.MaxPlayers && session.IsOpen)
+            {
+                targetSession = session;
+                break;
+            }
+        }
 
-            // GameManager might not be spawned yet, so retry
-            StartCoroutine(RegisterPlayerWhenReady(runner, player));
+        StartGameResult result;
+        
+        if (targetSession != null)
+        {
+            // Join existing session
+            Debug.Log($"🎯 Joining existing match: {targetSession.Name}");
+            if (loginUI != null) loginUI.ShowSearchingStatus($"Match found! Joining...");
+
+            result = await runner.StartGame(new StartGameArgs()
+            {
+                GameMode = GameMode.Shared,
+                SessionName = targetSession.Name,
+                Scene = info,
+                SceneManager = sceneManager,
+                PlayerCount = maxPlayersPerRoom
+            });
         }
         else
         {
-            Debug.Log("   This is NOT the local player - another client joined");
-        }
-    }
+            // Create new session with unique name
+            string sessionName = $"Match_{Guid.NewGuid().ToString().Substring(0, 8)}";
+            Debug.Log($"🆕 No available matches, creating: {sessionName}");
+            if (loginUI != null) loginUI.ShowSearchingStatus("Creating new match...");
 
-    private System.Collections.IEnumerator RegisterPlayerWhenReady(NetworkRunner runner, PlayerRef player)
-    {
-        // Wait for GameManager to spawn (max 5 seconds)
-        float timeout = 5f;
-        float elapsed = 0f;
-
-        while (elapsed < timeout)
-        {
-            var gameManager = FindObjectOfType<GameManager>();
-
-            if (gameManager != null && gameManager.Object != null && gameManager.Object.IsValid)
+            result = await runner.StartGame(new StartGameArgs()
             {
-                Debug.Log("   ✅ GameManager found, registering player");
-
-                if (APIManager.Instance != null && APIManager.Instance.IsLoggedIn)
-                {
-                    Debug.Log(
-                        $"   Calling RPC_RegisterPlayerWithInfo: {APIManager.Instance.CurrentUsername}, ELO: {APIManager.Instance.CurrentEloRating}");
-
-                    gameManager.RPC_RegisterPlayerWithInfo(
-                        APIManager.Instance.CurrentUsername,
-                        APIManager.Instance.CurrentEloRating,
-                        player
-                    );
-                }
-                else
-                {
-                    Debug.LogError("   ❌ APIManager not logged in!");
-                }
-
-                yield break; // Success, stop retrying
-            }
-
-            elapsed += 0.1f;
-            yield return new WaitForSeconds(0.1f);
+                GameMode = GameMode.Shared,
+                SessionName = sessionName,
+                Scene = info,
+                SceneManager = sceneManager,
+                PlayerCount = maxPlayersPerRoom
+            });
         }
 
-        Debug.LogError("   ❌ GameManager not found after 5 seconds timeout!");
-    }
+        isSearchingForMatch = false;
 
-    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
-    {
-        Debug.Log($"❌ Player left: {player}");
-    }
-
-    public void OnConnectedToServer(NetworkRunner runner)
-    {
-        Debug.Log("✓ Connected to server");
-    }
-
-    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason)
-    {
-        Debug.Log($"❌ Disconnected: {reason}");
-    }
-
-    // Required empty implementations
-    public void OnInput(NetworkRunner runner, NetworkInput input)
-    {
-    }
-
-    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input)
-    {
-    }
-
-    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason)
-    {
-    }
-
-    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token)
-    {
-    }
-
-    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason)
-    {
-    }
-
-    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message)
-    {
+        if (result.Ok)
+        {
+            Debug.Log("✅ Connected to match!");
+            if (loginUI != null) loginUI.ShowGame();
+        }
+        else
+        {
+            Debug.LogError($"❌ Failed to connect: {result.ShutdownReason}");
+            if (loginUI != null) loginUI.ShowSearchingStatus("Connection failed. Please restart.");
+        }
     }
 
     public void OnSessionListUpdated(NetworkRunner runner, List<SessionInfo> sessionList)
     {
+        Debug.Log($"📋 Session list updated: {sessionList.Count} sessions found");
+        availableSessions = sessionList;
+
+        foreach (var session in sessionList)
+        {
+            Debug.Log($"   - {session.Name}: {session.PlayerCount}/{session.MaxPlayers} (Open: {session.IsOpen})");
+        }
     }
 
-    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data)
+    public void OnConnectedToServer(NetworkRunner runner)
     {
-    }
-
-    public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
-    {
-    }
-
-    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data)
-    {
-    }
-
-    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress)
-    {
+        Debug.Log($"✓ Connected! Master: {runner.IsSharedModeMasterClient}, LocalPlayer: {runner.LocalPlayer}");
     }
 
     public void OnSceneLoadDone(NetworkRunner runner)
     {
+        Debug.Log($"✓ Scene loaded! Master: {runner.IsSharedModeMasterClient}");
+        TrySpawnGameManager();
     }
 
-    public void OnSceneLoadStart(NetworkRunner runner)
+    public void OnHostMigration(NetworkRunner runner, HostMigrationToken hostMigrationToken)
     {
+        Debug.Log("👑 Host migration - I am now master client!");
+        StartCoroutine(DelayedHostMigrationCheck());
     }
 
-    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
+    private IEnumerator DelayedHostMigrationCheck()
     {
+        yield return null;
+        yield return null;
+        
+        TrySpawnGameManager();
     }
 
-    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player)
+    private void TrySpawnGameManager()
     {
+        if (!runner.IsSharedModeMasterClient)
+        {
+            Debug.Log("   Not master client, skipping spawn");
+            return;
+        }
+
+        var existing = FindObjectOfType<GameManager>();
+        if (existing != null && existing.Object != null && existing.Object.IsValid)
+        {
+            Debug.Log("✅ GameManager already exists");
+            return;
+        }
+
+        Debug.Log("✅ I AM HOST - SPAWNING GAMEMANAGER");
+        
+        if (gameManagerPrefab != null)
+        {
+            runner.Spawn(gameManagerPrefab, Vector3.zero, Quaternion.identity);
+        }
+        else
+        {
+            Debug.LogError("❌ gameManagerPrefab is NULL!");
+        }
     }
 
-    #endregion
+    public void OnPlayerJoined(NetworkRunner runner, PlayerRef player)
+    {
+        Debug.Log($"✓ Player joined: {player} (Me: {runner.LocalPlayer})");
+
+        if (player == runner.LocalPlayer && !hasRegisteredPlayer)
+        {
+            StartCoroutine(RegisterPlayer(runner, player));
+        }
+    }
+
+    public void OnPlayerLeft(NetworkRunner runner, PlayerRef player)
+    {
+        Debug.Log($"👋 Player left: {player}");
+        
+        if (runner.IsSharedModeMasterClient)
+        {
+            StartCoroutine(CheckGameManagerAfterPlayerLeft());
+        }
+    }
+
+    private IEnumerator CheckGameManagerAfterPlayerLeft()
+    {
+        yield return new WaitForSeconds(0.5f);
+        
+        var gm = FindObjectOfType<GameManager>();
+        if (gm == null || gm.Object == null || !gm.Object.IsValid)
+        {
+            Debug.Log("🔄 GameManager was destroyed with previous host, respawning...");
+            TrySpawnGameManager();
+            
+            yield return new WaitForSeconds(0.5f);
+            hasRegisteredPlayer = false;
+            StartCoroutine(RegisterPlayer(runner, runner.LocalPlayer));
+        }
+    }
+
+    private IEnumerator RegisterPlayer(NetworkRunner runner, PlayerRef player)
+    {
+        yield return new WaitForSeconds(0.5f);
+
+        for (int i = 0; i < 100; i++)
+        {
+            var gm = FindObjectOfType<GameManager>();
+            if (gm != null && gm.Object != null && gm.Object.IsValid)
+            {
+                Debug.Log($"✅ Registering {APIManager.Instance.CurrentUsername}");
+                gm.RPC_RegisterPlayerWithInfo(
+                    APIManager.Instance.CurrentUsername,
+                    APIManager.Instance.CurrentEloRating,
+                    APIManager.Instance.CurrentPlayerId,
+                    player
+                );
+                hasRegisteredPlayer = true;
+                yield break;
+            }
+            yield return new WaitForSeconds(0.1f);
+        }
+
+        Debug.LogError("❌ GameManager never appeared!");
+    }
+
+    public void OnInput(NetworkRunner runner, NetworkInput input) { }
+    public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
+    public void OnShutdown(NetworkRunner runner, ShutdownReason shutdownReason) { }
+    public void OnDisconnectedFromServer(NetworkRunner runner, NetDisconnectReason reason) { }
+    public void OnConnectRequest(NetworkRunner runner, NetworkRunnerCallbackArgs.ConnectRequest request, byte[] token) { }
+    public void OnConnectFailed(NetworkRunner runner, NetAddress remoteAddress, NetConnectFailedReason reason) { }
+    public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
+    public void OnCustomAuthenticationResponse(NetworkRunner runner, Dictionary<string, object> data) { }
+    public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
+    public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
+    public void OnSceneLoadStart(NetworkRunner runner) { }
+    public void OnObjectExitAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
+    public void OnObjectEnterAOI(NetworkRunner runner, NetworkObject obj, PlayerRef player) { }
 }

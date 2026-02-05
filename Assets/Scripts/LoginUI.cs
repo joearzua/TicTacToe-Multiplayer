@@ -15,7 +15,8 @@ public class LoginUI : MonoBehaviour
     [SerializeField] private Button loginButton;
     [SerializeField] private Button registerButton;
     [SerializeField] private TextMeshProUGUI statusText;
-    [SerializeField] private GameObject gameUI; // Reference to main game UI
+    [SerializeField] private GameObject gameUI;
+    [SerializeField] private TextMeshProUGUI searchingStatusText;
 
     private void Start()
     {
@@ -49,22 +50,12 @@ public class LoginUI : MonoBehaviour
                 statusText.text = message;
                 statusText.color = Color.green;
 
-                // Update GameManager with player ID
-                var gameManager = FindObjectOfType<GameManager>();
-                if (gameManager != null)
-                {
-                    gameManager.SetLocalPlayerId(APIManager.Instance.CurrentPlayerId);
-                }
-
-                // Start Photon connection AFTER login
+                // Start matchmaking
                 var networkManager = FindObjectOfType<NetworkManager>();
                 if (networkManager != null)
                 {
-                    networkManager.StartGameAfterLogin();
+                    networkManager.StartMatchmaking();
                 }
-
-                // Hide login, show game
-                Invoke(nameof(ShowGame), 1f);
             }
             else
             {
@@ -103,22 +94,12 @@ public class LoginUI : MonoBehaviour
                 statusText.text = message;
                 statusText.color = Color.green;
 
-                // Update GameManager with player ID
-                var gameManager = FindObjectOfType<GameManager>();
-                if (gameManager != null)
-                {
-                    gameManager.SetLocalPlayerId(APIManager.Instance.CurrentPlayerId);
-                }
-
-                // Start Photon connection AFTER login
+                // Start matchmaking
                 var networkManager = FindObjectOfType<NetworkManager>();
                 if (networkManager != null)
                 {
-                    networkManager.StartGameAfterLogin();
+                    networkManager.StartMatchmaking();
                 }
-
-                // Hide login, show game
-                Invoke(nameof(ShowGame), 1f);
             }
             else
             {
@@ -128,9 +109,22 @@ public class LoginUI : MonoBehaviour
         }));
     }
 
-    private void ShowGame()
+    public void ShowSearchingStatus(string message)
+    {
+        if (searchingStatusText != null)
+        {
+            searchingStatusText.text = message;
+            searchingStatusText.gameObject.SetActive(true);
+        }
+
+        statusText.text = message;
+        statusText.color = Color.yellow;
+    }
+
+    public void ShowGame()
     {
         loginPanel.SetActive(false);
         if (gameUI != null) gameUI.SetActive(true);
+        if (searchingStatusText != null) searchingStatusText.gameObject.SetActive(false);
     }
 }

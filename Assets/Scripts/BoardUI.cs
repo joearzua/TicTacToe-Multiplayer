@@ -1,21 +1,18 @@
+using System.Linq;
 using Fusion;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-/// <summary>
-/// Client-side UI - displays game state from server
-/// All game logic is on server, this just displays it
-/// </summary>
 public class BoardUI : MonoBehaviour
 {
     [Header("References")] [SerializeField]
     private GameManager gameManager;
 
-    [SerializeField] private Button[] cellButtons; // 9 buttons (0-8)
+    [SerializeField] private Button[] cellButtons;
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private TextMeshProUGUI playerInfoText;
-    [SerializeField] private TextMeshProUGUI opponentInfoText; // NEW - add this field
+    [SerializeField] private TextMeshProUGUI opponentInfoText;
     [SerializeField] private Button resetButton;
 
     [Header("Cell Display")] [SerializeField]
@@ -24,73 +21,86 @@ public class BoardUI : MonoBehaviour
     [SerializeField] private string player2Symbol = "O";
 
     private NetworkRunner runner;
+    private bool opponentDisconnected = false;
+    private bool opponentEverConnected = false;
 
     private void Start()
     {
-        Debug.Log("🎬 BoardUI Start - setting up buttons");
-
-        // Setup button callbacks
         for (int i = 0; i < cellButtons.Length; i++)
         {
-            int index = i; // Capture for closure
+            int index = i;
             cellButtons[i].onClick.AddListener(() => OnCellClicked(index));
         }
 
         resetButton.onClick.AddListener(OnResetClicked);
-
-        // Find runner
         runner = FindObjectOfType<NetworkRunner>();
-        if (runner != null)
-        {
-            Debug.Log("✅ Found NetworkRunner in Start");
-        }
-        else
-        {
-            Debug.LogError("❌ NetworkRunner NOT found in Start!");
-        }
     }
 
     private void Update()
     {
-        // Keep trying to find runner until we have it
         if (runner == null)
         {
             runner = FindObjectOfType<NetworkRunner>();
-            if (runner != null)
+        }
+
+        // Find GameManager if not cached
+        if (gameManager == null)
+        {
+            gameManager = FindObjectOfType<GameManager>();
+            if (gameManager == null) return; // Not spawned yet
+        }
+
+        if (gameManager.Object == null || !gameManager.Object.IsValid) return;
+
+        int myPlayerNumber = GetMyPlayerNumber(gameManager);
+
+        // Track if opponent ever connected
+        if (myPlayerNumber == 1 && gameManager.Player2 != PlayerRef.None)
+        {
+            opponentEverConnected = true;
+        }
+        else if (myPlayerNumber == 2 && gameManager.Player1 != PlayerRef.None)
+        {
+            opponentEverConnected = true;
+        }
+
+        // Check for disconnect
+        if (!gameManager.GameOver && opponentEverConnected && !opponentDisconnected)
+        {
+            bool opponentStillConnected = false;
+
+            if (myPlayerNumber == 1)
             {
-                Debug.Log("✅ Found NetworkRunner!");
+                opponentStillConnected = runner.ActivePlayers.Contains(gameManager.Player2);
+            }
+            else if (myPlayerNumber == 2)
+            {
+                opponentStillConnected = runner.ActivePlayers.Contains(gameManager.Player1);
+            }
+
+            if (!opponentStillConnected)
+            {
+                Debug.Log("🚪 Opponent disconnected!");
+                opponentDisconnected = true;
             }
         }
 
-        // Don't update board until we have both
-        if (gameManager == null || runner == null) return;
-
-        // Check if GameManager's NetworkObject is spawned
-        if (gameManager.Object == null || !gameManager.Object.IsValid) return;
-
         UpdateBoard(gameManager);
         UpdateStatus(gameManager);
-        UpdatePlayerInfo(gameManager); // NEW - call this
+        UpdatePlayerInfo(gameManager);
+        UpdateButtonStates(gameManager);
     }
 
     private void OnCellClicked(int position)
     {
-        if (runner == null || gameManager == null)
-        {
-            Debug.LogWarning("⚠️ Runner or GameManager not ready yet");
-            return;
-        }
-
+        if (runner == null || gameManager == null) return;
         if (gameManager.GameOver) return;
+        if (opponentDisconnected) return;
         if (!IsMyTurn(gameManager)) return;
 
-        Debug.Log($"📤 Sending move for position {position}");
         gameManager.RPC_RequestMove(position, runner.LocalPlayer);
     }
 
-    /// <summary>
-    /// Update board display from server state
-    /// </summary>
     private void UpdateBoard(GameManager gm)
     {
         for (int i = 0; i < 9; i++)
@@ -115,11 +125,44 @@ public class BoardUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Update status text
-    /// </summary>
     private void UpdateStatus(GameManager gm)
     {
+        int myPlayerNumber = GetMyPlayerNumber(gm);
+
+        // Check if player is not registered yet
+        if (myPlayerNumber == 0)
+        {
+            statusText.text = "CONNECTING...";
+            statusText.color = Color.yellow;
+            return;
+        }
+
+        // Check if opponent disconnected
+        if (opponentDisconnected)
+        {
+            statusText.text = "OPPONENT DISCONNECTED";
+            statusText.color = Color.red;
+            return;
+        }
+
+        // Check if waiting for opponent
+        bool waitingForOpponent = false;
+        if (myPlayerNumber == 1 && gm.Player2 == PlayerRef.None)
+        {
+            waitingForOpponent = true;
+        }
+        else if (myPlayerNumber == 2 && gm.Player1 == PlayerRef.None)
+        {
+            waitingForOpponent = true;
+        }
+
+        if (waitingForOpponent)
+        {
+            statusText.text = "WAITING FOR OPPONENT...";
+            statusText.color = Color.yellow;
+            return;
+        }
+
         // Show game status
         if (gm.GameOver)
         {
@@ -151,16 +194,12 @@ public class BoardUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// NEW METHOD - Update player name and ELO display
-    /// </summary>
     private void UpdatePlayerInfo(GameManager gm)
     {
         int myPlayerNumber = GetMyPlayerNumber(gm);
 
         if (myPlayerNumber == 1)
         {
-            // I'm Player 1
             playerInfoText.text = $"{gm.Player1Name}\nELO: {gm.Player1Elo}";
 
             if (gm.Player2 != PlayerRef.None)
@@ -174,21 +213,34 @@ public class BoardUI : MonoBehaviour
         }
         else if (myPlayerNumber == 2)
         {
-            // I'm Player 2
             playerInfoText.text = $"{gm.Player2Name}\nELO: {gm.Player2Elo}";
             opponentInfoText.text = $"{gm.Player1Name}\nELO: {gm.Player1Elo}";
         }
         else
         {
-            // Not registered yet
             playerInfoText.text = "Connecting...";
             opponentInfoText.text = "";
         }
     }
 
-    /// <summary>
-    /// Reset button clicked
-    /// </summary>
+    private void UpdateButtonStates(GameManager gm)
+    {
+        int myPlayerNumber = GetMyPlayerNumber(gm);
+        bool waitingForOpponent = (myPlayerNumber == 1 && gm.Player2 == PlayerRef.None) ||
+                                  (myPlayerNumber == 2 && gm.Player1 == PlayerRef.None);
+
+        bool canPlay = !gm.GameOver &&
+                       !opponentDisconnected &&
+                       !waitingForOpponent &&
+                       IsMyTurn(gm);
+
+        // Enable/disable all cell buttons
+        foreach (var button in cellButtons)
+        {
+            button.interactable = canPlay;
+        }
+    }
+
     private void OnResetClicked()
     {
         if (gameManager != null)
@@ -200,7 +252,6 @@ public class BoardUI : MonoBehaviour
     private bool IsMyTurn(GameManager gm)
     {
         if (runner == null || gm == null) return false;
-
         int myPlayerNumber = GetMyPlayerNumber(gm);
         return myPlayerNumber == gm.CurrentPlayer;
     }
@@ -208,7 +259,6 @@ public class BoardUI : MonoBehaviour
     private int GetMyPlayerNumber(GameManager gm)
     {
         if (runner == null || gm == null) return 0;
-
         if (runner.LocalPlayer == gm.Player1) return 1;
         if (runner.LocalPlayer == gm.Player2) return 2;
         return 0;

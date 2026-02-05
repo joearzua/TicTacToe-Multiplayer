@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &5012360483631517435
+--- !u!1 &598016015239152608
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,9 +8,9 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 206987061032713220}
-  - component: {fileID: 6077096824815790892}
-  - component: {fileID: 5500819163489809815}
+  - component: {fileID: 4313750689382368898}
+  - component: {fileID: 9095238372029531960}
+  - component: {fileID: 1113471004873744128}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -18,53 +18,65 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &206987061032713220
+--- !u!4 &4313750689382368898
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5012360483631517435}
+  m_GameObject: {fileID: 598016015239152608}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 117.45833, y: 241.79027, z: -1.6063435}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6077096824815790892
+--- !u!114 &9095238372029531960
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5012360483631517435}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b932a25d64af61149a6ad8f517ebf9b7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _Board: 
-  _CurrentPlayer: 1
-  _Winner: 0
-  _GameOver: 0
---- !u!114 &5500819163489809815
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5012360483631517435}
+  m_GameObject: {fileID: 598016015239152608}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  SortKey: 2343699699
+  SortKey: 1648012245
   ObjectInterest: 1
   Flags: 786433
   NestedObjects: []
   NetworkedBehaviours:
-  - {fileID: 6077096824815790892}
+  - {fileID: 1113471004873744128}
   ForceRemoteRenderTimeframe: 0
+--- !u!114 &1113471004873744128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 598016015239152608}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b932a25d64af61149a6ad8f517ebf9b7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _Player1BackendId: 0
+  _Player2BackendId: 0
+  _Player1Name:
+    _length: 0
+    _data:
+      Data: 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+  _Player2Name:
+    _length: 0
+    _data:
+      Data: 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+  _Player1Elo: 0
+  _Player2Elo: 0
+  _Board: 
+  _CurrentPlayer: 1
+  _Winner: 0
+  _GameOver: 0
