@@ -12,7 +12,6 @@ public class ThemeManager : MonoBehaviour
     [Header("References")] [SerializeField]
     private Image backgroundImage;
 
-    //[SerializeField] private Image[] gridLines; // Assign the 4 grid lines
     [SerializeField] private Button[] cellButtons;
     [SerializeField] private TextMeshProUGUI statusText;
 
@@ -49,11 +48,11 @@ public class ThemeManager : MonoBehaviour
     /// </summary>
     public async void LoadThemeAsync(string themeName)
     {
-        Debug.Log($"🎨 Loading theme: {themeName}");
+        Debug.Log($"Loading theme: {themeName}");
 
         if (loadedThemes.ContainsKey(themeName))
         {
-            Debug.Log($"✅ Theme already loaded, applying: {themeName}");
+            Debug.Log($"Theme already loaded, applying: {themeName}");
             ApplyTheme(loadedThemes[themeName]);
             return;
         }
@@ -63,13 +62,13 @@ public class ThemeManager : MonoBehaviour
 
         if (handle.Status == AsyncOperationStatus.Succeeded)
         {
-            Debug.Log($"✅ Theme loaded: {themeName}");
+            Debug.Log($"Theme loaded: {themeName}");
             loadedThemes[themeName] = handle.Result;
             ApplyTheme(handle.Result);
         }
         else
         {
-            Debug.LogError($"❌ Failed to load theme: {themeName}");
+            Debug.LogError($"Failed to load theme: {themeName}");
         }
     }
 
@@ -80,30 +79,18 @@ public class ThemeManager : MonoBehaviour
     {
         if (theme == null)
         {
-            Debug.LogWarning("⚠️ No theme provided");
+            Debug.LogWarning("No theme provided");
             return;
         }
 
         currentTheme = theme;
-        Debug.Log($"🎨 Applying theme: {theme.themeName}");
+        Debug.Log($"Applying theme: {theme.themeName}");
 
         // Apply background
         if (backgroundImage != null)
         {
             backgroundImage.color = theme.backgroundColor;
         }
-
-        // Apply grid lines
-        // if (gridLines != null)
-        // {
-        //     foreach (var line in gridLines)
-        //     {
-        //         if (line != null)
-        //         {
-        //             line.color = theme.gridLineColor;
-        //         }
-        //     }
-        // }
 
         // Apply cell buttons
         if (cellButtons != null)

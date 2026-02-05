@@ -12,8 +12,8 @@ public class APIManager : MonoBehaviour
 {
     public static APIManager Instance { get; private set; }
 
-    [Header("API Configuration")]
-    [SerializeField] private string apiBaseUrl = "http://localhost:5000/api";
+    [Header("API Configuration")] [SerializeField]
+    private string apiBaseUrl = "http://localhost:5000/api";
 
     // Current logged-in player info
     public int CurrentPlayerId { get; private set; }
@@ -114,7 +114,7 @@ public class APIManager : MonoBehaviour
         CurrentPlayerId = response.playerId;
         CurrentUsername = response.username;
         CurrentEloRating = response.eloRating;
-        Debug.Log($"✅ Logged in as {CurrentUsername} (ELO: {CurrentEloRating})");
+        Debug.Log($"Logged in as {CurrentUsername} (ELO: {CurrentEloRating})");
     }
 
     #endregion
@@ -146,12 +146,12 @@ public class APIManager : MonoBehaviour
 
             if (request.result == UnityWebRequest.Result.Success)
             {
-                Debug.Log("✅ Match saved to backend");
+                Debug.Log("Match saved to backend");
                 callback?.Invoke(true);
             }
             else
             {
-                Debug.LogError($"❌ Failed to save match: {request.downloadHandler.text}");
+                Debug.LogError($"Failed to save match: {request.downloadHandler.text}");
                 callback?.Invoke(false);
             }
         }
@@ -179,8 +179,8 @@ public class APIManager : MonoBehaviour
             }
             else
             {
-                Debug.LogError($"❌ Failed to get leaderboard: {request.error}");
-                callback?.Invoke(new LeaderboardEntry[0]);
+                Debug.LogError($"Failed to get leaderboard: {request.error}");
+                callback?.Invoke(Array.Empty<LeaderboardEntry>());
             }
         }
     }

@@ -7,8 +7,9 @@ using TMPro;
 /// </summary>
 public class LeaderboardUI : MonoBehaviour
 {
-    [Header("UI References")]
-    [SerializeField] private GameObject leaderboardPanel;
+    [Header("UI References")] [SerializeField]
+    private GameObject leaderboardPanel;
+
     [SerializeField] private Transform leaderboardContent; // Parent for entries
     [SerializeField] private GameObject entryPrefab; // Prefab for one leaderboard entry
     [SerializeField] private Button refreshButton;
@@ -18,10 +19,10 @@ public class LeaderboardUI : MonoBehaviour
     {
         if (refreshButton != null)
             refreshButton.onClick.AddListener(RefreshLeaderboard);
-        
+
         if (closeButton != null)
             closeButton.onClick.AddListener(() => leaderboardPanel.SetActive(false));
-        
+
         leaderboardPanel.SetActive(false);
     }
 
@@ -45,7 +46,7 @@ public class LeaderboardUI : MonoBehaviour
             foreach (var entry in entries)
             {
                 GameObject entryObj = Instantiate(entryPrefab, leaderboardContent);
-                
+
                 // Assuming entry prefab has: RankText, UsernameText, EloText, GamesText
                 var texts = entryObj.GetComponentsInChildren<TextMeshProUGUI>();
                 if (texts.Length >= 4)

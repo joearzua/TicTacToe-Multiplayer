@@ -80,7 +80,7 @@ public class BoardUI : MonoBehaviour
 
             if (!opponentStillConnected)
             {
-                Debug.Log("🚪 Opponent disconnected!");
+                Debug.Log("Opponent disconnected!");
                 opponentDisconnected = true;
             }
         }
@@ -106,13 +106,13 @@ public class BoardUI : MonoBehaviour
         // Get current theme colors
         Color player1Color = Color.blue;
         Color player2Color = Color.red;
-    
+
         if (ThemeManager.Instance != null && ThemeManager.Instance.CurrentTheme != null)
         {
             player1Color = ThemeManager.Instance.CurrentTheme.player1Color;
             player2Color = ThemeManager.Instance.CurrentTheme.player2Color;
         }
-    
+
         for (int i = 0; i < 9; i++)
         {
             int cellValue = gm.Board[i];
